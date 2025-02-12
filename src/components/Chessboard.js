@@ -9,9 +9,17 @@ const ChessboardComponent = () => {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const stockfishWorker = new Worker("/stockfish.js"); // Cargar desde /public
-      stockfishWorker.postMessage("uci");
-      setEngine(stockfishWorker);
+      console.log("Cargando Stockfish...");
+      try {
+        const stockfishWorker = new Worker("/stockfish.js");
+        stockfishWorker.postMessage("uci");
+        stockfishWorker.onmessage = (event) => {
+          console.log("Stockfish dice:", event.data);
+        };
+        setEngine(stockfishWorker);
+      } catch (error) {
+        console.error("Error cargando Stockfish:", error);
+      }
     }
   }, []);
 
@@ -25,39 +33,57 @@ const ChessboardComponent = () => {
     }
   };
 
-  const makeAIMove = () => {
-    if (!engine) return;
+  const makeAIMove = (fen) => {
+    if (!engine) {
+      console.error("Stockfish no está disponible.");
+      return;
+    }
 
     engine.onmessage = (event) => {
       if (event.data.startsWith("bestmove")) {
         const bestMove = event.data.split(" ")[1];
-        const newGame = new Chess(game.fen());
-        newGame.move({ from: bestMove.substring(0, 2), to: bestMove.substring(2, 4), promotion: "q" });
-        setGame(newGame);
-        updateStatus(newGame);
+        console.log("Mejor movimiento de la IA:", bestMove);
+
+        if (bestMove.length === 4) {
+          const from = bestMove.substring(0, 2);
+          const to = bestMove.substring(2, 4);
+
+          const newGame = new Chess(fen); // 🔹 Usa el FEN actualizado del jugador
+          const move = newGame.move({ from, to, promotion: "q" });
+
+          if (move) {
+            setGame(newGame);
+            updateStatus(newGame);
+          } else {
+            console.error("Movimiento de IA inválido:", bestMove);
+          }
+        }
       }
     };
 
-    engine.postMessage(`position fen ${game.fen()}`);
-    engine.postMessage("go depth 10"); // Ajusta la dificultad de la IA
-  };
+    engine.postMessage(`position fen ${fen}`);
+    engine.postMessage("go depth 5"); // Ajusta la dificultad de la IA
+};
 
   const onDrop = (sourceSquare, targetSquare) => {
-    const newGame = new Chess(game.fen());
+    const newGame = new Chess(game.fen()); // Clona el estado actual
     const move = newGame.move({
       from: sourceSquare,
       to: targetSquare,
-      promotion: "q",
+      promotion: "q", // Promociona automáticamente a reina
     });
 
     if (move) {
-      setGame(newGame);
+      console.log("Movimiento del jugador:", move);
+      setGame(newGame); // 🔹 Actualiza el estado del juego ANTES de llamar a la IA
       updateStatus(newGame);
-      setTimeout(() => makeAIMove(), 500); // La IA responde
-    }
-  };
 
-  return (
+      setTimeout(() => makeAIMove(newGame.fen()), 500); // 🔹 Pasa la posición actualizada a Stockfish
+    }
+};
+
+
+return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
       <h2>Juego de Ajedrez vs IA</h2>
       <p>{status}</p>
